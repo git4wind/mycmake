@@ -364,6 +364,106 @@ public:
     int m_num = 100;
 };
 
+//lambda
+void lambdafunc(int x, int y)
+{
+    int a = 0;
+    int b = 1;
+    //lambda []没有捕获参数,则此表达式可转化为函数指针;
+    using ptr = void(*)(int);
+    ptr ptr1 = [](int x)
+    {
+        cout << "x: " << x << endl;
+    };
+    ptr1(10);
+    //对于lambda表达式[=,&,...]有参数捕获的,lambda表达式就只能是仿函数类型;
+    //使用可调用对象包装器function<> 对lambda表达式进行包装;   //mutable选项可修改仿函数operate()的const属性;
+    function<void(int)> ff1 = [=](int y) mutable
+    {
+        cout << "y: " << y << endl;
+    };
+    ff1(11);
+    //使用可调用对象绑定器bind() 对lambda表达式进行绑定;
+    function<void(int)> ff2 = std::bind([=](int z) mutable
+    {
+        cout << "z: " << z << endl;
+    },placeholders::_1 );
+    ff2(12);
+
+}
+//右值引用的作用和使用
+class ReadOnlyValue
+{
+public:
+    ReadOnlyValue():m_pNum(new int(100))
+    {
+        cout << "construct class : it is. " << endl;
+        printf("m_pNum 地址: %p \n" , m_pNum);
+    }
+    //拷贝构造函数防止浅拷贝;
+    ReadOnlyValue(const ReadOnlyValue & a) : m_pNum(new int(*a.m_pNum))
+    {
+        cout << "copy construct : it is." << endl;
+    }
+    //右值引用构造函数或者叫移动构造函数,目标(目的): 复用其他对象中的资源(堆内存) ;实现浅拷贝不去使用深拷贝;
+    ReadOnlyValue(ReadOnlyValue && a) : m_pNum(a.m_pNum)
+    {
+        a.m_pNum = nullptr;
+        cout << "move construct : 浅拷贝." << endl;
+    }
+
+    ~ReadOnlyValue()
+    {
+        cout << "destruct class : delete new  ptr attr." << endl;
+        if(m_pNum)
+        {
+            delete m_pNum;
+            m_pNum = nullptr;
+        }
+    }
+public:
+    int * m_pNum = nullptr;
+
+};
+//返回将亡值得方式:
+ReadOnlyValue getObj()
+{
+    ReadOnlyValue rightValue;
+    return rightValue;
+}
+ReadOnlyValue getObj1()
+{
+    return ReadOnlyValue();
+}
+ReadOnlyValue && getObj2()
+{
+    return ReadOnlyValue();
+}
+//std::forward<T >(t)
+template<typename T>
+void printValue(T& t)
+{
+    cout << "left-value: " << t << endl;
+}
+
+template<typename T>
+void printValue(T&& t)
+{
+    cout << "right-value: " << t << endl;
+}
+// 泛型编程 T&& 和 auto &&,在这2中场景下 && 被称作未定的引用类型; 未定类型引用的推导, 规则: 右值或者非右值(右值引用,左值,左值引用,常量右值引用,常量左值引用);
+// 1, const T&& 表示一个右值引用,不是未定引用类型; 2, 通过右值推导 T&&或者auto&& 得到的是一个右值引用类型; 否则通过非右值推导T&&或者auto&& 得到的是一个左值引用类型;
+template<typename T>
+void testForward(T && v)
+{
+    printValue(v);
+    printValue(std::move(v));
+    printValue(std::forward<T>(v));
+    cout << endl;
+}
+
+
+
 #endif
 
 int main()
@@ -432,6 +532,7 @@ int main()
     ch.func();
     ch.func(100,"hello");
 #endif
+#if 0
     Test t;
     t("我是仿函数");
     Test tt;
@@ -495,7 +596,55 @@ int main()
     function<int &()> f33 = std::bind(&Test2::m_num, &ts2);
     f33() = 888;
     cout << "f33(): " << f33() << endl;
-
+#endif
+    //lambda
+    lambdafunc(1,2);
+    //左值: loactor value ;可取地址的值; 指存储在内存中、有明确存储地址（可取地址）的数据；
+    //右值: read value ; 只读的值; 右值是指可以提供数据值的数据（不可取地址）；
+    //左值
+    int nNum = 9;
+    //左值引用
+    int & a = nNum;
+    //右值 右值引用:只能通过右值进行初始化;
+    int && b = 8;
+    //常量左值引用 ; //constexpr 编译阶段会替换表达式,提高运行效率;
+    const int & c = nNum;
+    const int & f = b;
+    //常量右值引用
+    const int && d = 6;
+    //const int && e = b; //error
+    //int && e = b; //error
+    const int & g = d;
+    const int & h = a;
+    //右值引用可以延长某块内存的生命周期;
+    // 右值:分纯右值和将亡值;
+    // 纯右值:非引用返回的临时变量,运算表达式产生的临时变量,原始字面量和lambda表达式等;
+    // 将亡值:与右值引用相关的表达式,比如,T&&类型函数的返回值,std::move的返回值等;
+    //下面2个赋值方式都要求右侧的对象一定是临时对象;
+    ReadOnlyValue rightValue = getObj(); //getObj()函数返回的是临时对象则会调用 ReadOnlyValue的移动构造函数来保留堆内存,如果返回的不是临时对象则编译器会调用ReadOnlyValue的拷贝构造函数;
+    cout << "右值引用赋值方式2:" << endl;
+    ReadOnlyValue && rightValue1 = getObj();
+    printf("右值引用赋值后的 m_pNum 地址: %p \n", rightValue1.m_pNum);
+    //如果没有移动构造函数,使用右值引用初始化的要求会更高一些;
+    //要求右侧是一个临时的不能取地址的对象, 如 return ReadOnlyValue();
+    cout << "无移动构造函数,右值引用初始化:" << endl;
+    ReadOnlyValue && rightValue2 = getObj1();
+    printf("没有移动构造函数,右值引用初始化: m_pNum 地址: %p \n", rightValue2.m_pNum);
+    //std::move 作用是将左值转化为右值(将亡值),转移资源来减少拷贝;
+    ReadOnlyValue && rightValue3 = std::move(rightValue1);
+    std::list<string> ls1{"test1", "test2","test3"};
+    std::list<string> ls2 = ls1;
+    std::list<string> ls3 = std::move(ls2);
+    //函数原型:  //template<class T> T&& forward(typename remove_reference<T>::type& t) noexcept;
+                //template<class T> T&& forward(typename remove_reference<T>::type&& t) noexcept;
+    //std::forward<T >(t) 完美转发,按参数的原来的类型转发到另一个函数;
+    //forward<T>(t)返回类型: 当T为左值引用类型时,t将被转换为T类型的左值;否则T为其他情况,t都被转换为T类型的右值;
+    testForward(520);
+    int num = 1314;
+    testForward(num);
+    testForward(forward<int>(num));
+    testForward(forward<int&>(num));
+    testForward(forward<int&&>(num));
 
     return 0;
 }
