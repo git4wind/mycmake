@@ -1,8 +1,9 @@
-#include <iostream>
-#include <map>
-#include <list>
-#include <typeinfo>
-#include <functional>
+#include <iostream>  // 字符串类,cout,cin,endl;
+#include <map>  // map<> 容器
+#include <list>  // list<> 容器
+#include <typeinfo> // typeid(t)获取对象的类型;
+#include <functional>  // 可调用对象包装器function<void(int,string)> ,std::bind<funcptr,placeholders::_1,...>
+#include <memory>  // 智能指针: std::shared_ptr<>, std::unique_ptr<>,std::weak_ptr<>
 
 using namespace std;
 
@@ -461,7 +462,18 @@ void testForward(T && v)
     printValue(std::forward<T>(v));
     cout << endl;
 }
-
+//
+struct Sharedptr
+{
+    shared_ptr<Sharedptr> getPtr()
+    {
+        return shared_ptr<Sharedptr>(this);
+    }
+    ~Sharedptr()
+    {
+        cout << "class Sharedptr is disstruct..." << endl;
+    }
+};
 
 
 #endif
@@ -597,6 +609,7 @@ int main()
     f33() = 888;
     cout << "f33(): " << f33() << endl;
 #endif
+#if 0
     //lambda
     lambdafunc(1,2);
     //左值: loactor value ;可取地址的值; 指存储在内存中、有明确存储地址（可取地址）的数据；
@@ -645,6 +658,116 @@ int main()
     testForward(forward<int>(num));
     testForward(forward<int&>(num));
     testForward(forward<int&&>(num));
+#endif
+    //#include <memory> 智能指针; //通过构造函数初始化;
+    std::shared_ptr<int> ptr1(new int(3));
+    cout << "ptr1 use_count: " << ptr1.use_count() << endl;
+    //通过移动构造和拷贝构造函数初始化;
+    shared_ptr<int> ptr2 = std::move(ptr1);
+    cout << "ptr1 use_count: " << ptr1.use_count() << endl;
+    cout << "ptr2 use_count: " << ptr2.use_count() << endl;
+    shared_ptr<int> ptr3 = ptr2;
+    cout << "ptr2 use_count: " << ptr2.use_count() << endl;
+    cout << "ptr3 use_count: " << ptr3.use_count() << endl;
+    //通过 std::make_shared 初始化;
+    shared_ptr<int> ptr4 = std::make_shared<int>(5);
+    //通过reset()初始化;
+    ptr4.reset();
+    cout << "ptr4 use_count: " << ptr4.use_count() << endl;
+    ptr3.reset(new int(9));
+    cout << "ptr3 use_count: " << ptr3.use_count() << endl;
+    cout << "ptr2 use_count: " << ptr2.use_count() << endl;
+    //获取原始指针;
+    int* ptr = ptr3.get(); //ptr3作为智能指针对象操作用. ;
+    *ptr = 8;
+    *ptr3 = 10; //ptr3作为指针指向内存的类型时用-> ;
+    //指定智能指针shared_ptr<T> 删除器函数;
+    shared_ptr<int> ptr5(new int(6),[](int* pt){
+        if(pt)
+        {
+            delete pt;
+            pt = nullptr;
+            cout << "智能指针的删除器函数被调用..." << endl;
+        }
+    });
+    // 智能指针管理内存是数组类型时必须指定删除器了;
+    shared_ptr<int> ptr6(new int[3],[](int* pt){
+        if (pt)
+        {
+            delete[] pt;
+            pt = nullptr;
+            cout << "智能指针的删除器函数被调用..." << endl;
+        }
+    });
+    shared_ptr<int> ptr7(new int[4], std::default_delete<int[]>() );
+    //unique_ptr<T> 1,通过构造函数初始化;
+    unique_ptr<int> ptr8(new int(8));
+    // 通过移动构造函数初始化;
+    unique_ptr<int> ptr9 = std::move(ptr8);
+    // 通过reset()初始化;
+    ptr9.reset(new int(9));
+    //获取原始指针;
+    int* ptr10 = ptr9.get();
+    *ptr10 = 10;
+    *ptr9 = 90;
+    //unique<T> 指定删除器;
+    using ptrFunc = void(*)(int *); //无参数时可以看作是函数指针;
+    unique_ptr<int, ptrFunc> ptr11(new int(11), [](int* pt){
+        if (pt)
+        {
+            delete pt;
+            pt = nullptr;
+            cout << "unique_ptr delete memory..." << endl;
+        }
+        
+    });
+    //有参数时,lambda表达式就是仿函数,必须使用可调用对象包装器function<void(int *)>对仿函数(lambda表达式)进行包装;
+    unique_ptr<int, function<void(int *)>> ptr12(new int(12), [=](int *pt){
+        if (pt)
+        {
+            delete pt;
+            pt = nullptr;
+            cout << "unique_ptr delete memory with lambda..." << endl;
+        }
+    });
+    unique_ptr<int[]> ptr13(new int[3]);
+    shared_ptr<int[]> ptr14(new int[2]);
+    //weak_ptr<T> 初始化;
+    shared_ptr<int> sp(new int(1));
+    weak_ptr<int> wp1;  //空对象,未被实例化;
+    weak_ptr<int> wp2(wp1); //空对象,未被实例化;
+    weak_ptr<int> wp3(sp);
+    weak_ptr<int> wp4 = sp;
+    weak_ptr<int> wp5 = wp3;
+    // lock():获取管理所监测资源的 shared_ptr<T> 对象;
+    shared_ptr<int> sp1, sp2;
+    weak_ptr<int> wp;
+    sp1 = make_shared<int>(521);
+    wp = sp1;
+    sp2 = wp.lock();
+    cout << "weak_ptr<int> use_count: " << wp.use_count() << endl;
+    // reset() 清空对象,使其不监测任何资源(内存);
+    sp1.reset();
+    cout << "weak_ptr<int> use_count: " << wp.use_count() << endl;
+    sp1 = wp.lock();
+    cout << "weak_ptr<int> use_count: " << wp.use_count() << endl;
+    // expired() 判断观测的资源是否已经被释放;
+    cout << "1.weak_ptr<int> wp " << (wp.expired()? "is" : "is not") << " expired." << endl;
+    wp.reset();
+    cout << "2.weak_ptr<int> wp " << (wp.expired()? "is" : "is not") << " expired." << endl;
+    cout << "shared_ptr<int> use_count: " << sp1.use_count() << endl;
+    cout << "*sp1: " << *sp1 << endl;
+    cout << "*sp2: " << *sp2 << endl;
+    /** shared_ptr<T> 使用的注意事项:
+     * 1.不能使用同一个原始地址初始化多个共享智能指针
+     * 2.函数不能返回管理了this的共享智能指针对象.this 也是相当于原始地址;
+     * 3.共享智能指针不能循环引用
+    */
+   Sharedptr * pst = new Sharedptr;
+   shared_ptr<Sharedptr> stt1(pst);
+   //shared_ptr<Sharedptr> stt2(pst); //error
+   shared_ptr<Sharedptr> stt2 = stt1;
+
 
     return 0;
 }
